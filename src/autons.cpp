@@ -162,23 +162,30 @@ void AutonSelector::update() {
 void diagnosticAuton() {
     odom.setPose(0.0f, 0.0f, 0.0f);
 
+    // Gains aren't tuned yet for the 0-127 output scale, so the tests run capped at
+    // about half power. Every move also gets its own timeout so one that can't settle
+    // doesn't eat the whole 15 s period. Raise the caps once the gains are tuned.
+    static constexpr hololib::MoveParams safe{.maxTranslationSpeed = 60.0f, .maxRotationSpeed = 60.0f, .timeout = 2500};
+
     // Test 1: Linear Translation
     diag_auton = 1;
-    autonMove(hololib::moveToPoint(0.0f, 24.0f));
+    autonMove(hololib::moveToPoint(0.0f, 24.0f, safe));
 
     // Test 2: Point Turn
     diag_auton = 2;
-    autonMove(hololib::turnToPoint(12.0f, 24.0f));
+    autonMove(hololib::turnToPoint(12.0f, 24.0f, safe));
 
     // Test 3: Holonomic Strafing
     diag_auton = 3;
-    autonMove(hololib::strafeDistance(10.0f));
+    autonMove(hololib::strafeDistance(10.0f, true, safe));
 
     // Test 4: Motion Chaining with Early Exit
     diag_auton = 4;
-    autonMove(hololib::moveToPoint(0.0f, 0.0f, {.minSpeed = 35.0f, .earlyExitRange = 7.0f, .timeout = 2000}));
+    autonMove(hololib::moveToPoint(0.0f, 0.0f,
+                                   {.maxTranslationSpeed = 60.0f, .maxRotationSpeed = 60.0f, .minSpeed = 35.0f,
+                                    .earlyExitRange = 7.0f, .timeout = 2000}));
     diag_auton = 5;
-    autonMove(hololib::moveToPose(0.0f, 0.0f, 0.0f));
+    autonMove(hololib::moveToPose(0.0f, 0.0f, 0.0f, safe));
 }
 
 void matchAuton() {

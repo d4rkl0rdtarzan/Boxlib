@@ -1,3 +1,27 @@
+# Box Bots (built on HoloLib)
+
+This is the Box Bots robot code, built on the [HoloLib](https://github.com/calhighrobotics/HoloLib) template.
+Robot-specific code lives in `src/main.cpp`, `src/autons.cpp` (autonomous routines and selector),
+`src/color_sort.cpp`, and the subsystem files (`Intake`, `Lift`, `Claw`, `Claw_Pivot`, `VPI`, `Subsystems`).
+The rest of this README is HoloLib's original documentation.
+
+Driver controls: sticks = tank drive with strafing, R1/R2 = intake, X (hold) = color sort intake,
+L1/L2 = lift, B = claw toggle, A = VPI toggle, D-pad up/down = claw pivot.
+
+Brain screen: left/right buttons page through the autonomous routines (Match is the default),
+then the position, color sensor and tracking wheel readouts.
+
+Changes from upstream HoloLib:
+
+- `Chassis::drive()` takes 0-127 inputs and converts to millivolts once.
+- `MoveSettings` binds to the `::` globals.
+- `Chassis::calibrate()` gives up after 3 s instead of waiting forever on a missing IMU.
+- `Chassis::resetDriveControl()` clears the driver heading hold.
+- Odometry ignores tracking-wheel read errors.
+- The non-EKF odometry path uses the VEX heading convention.
+
+---
+
 # HoloLib
 
 ![Stars badge](https://img.shields.io/github/stars/calhighrobotics/HoloLib?style=flat) ![License badge](https://img.shields.io/github/license/calhighrobotics/HoloLib)

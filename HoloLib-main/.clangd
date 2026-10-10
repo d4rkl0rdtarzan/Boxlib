@@ -1,4 +1,0 @@
----
-# ARM compiler specific, not supported by clang
-CompileFlags:
-  Remove: [-mcpu=*, -mfloat-abi=*, -mfpu=*]

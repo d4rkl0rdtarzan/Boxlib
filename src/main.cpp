@@ -17,6 +17,7 @@
 #include "VPI.hpp"
 #include "intake.hpp"
 #include "lift.hpp"
+#include "Claw_Pivot.hpp"
 #include "autons.hpp"
 #include "color_sort.hpp"
 
@@ -81,7 +82,7 @@ LiftConfig my_lift_config = {
 ModularLift my_lift(lift_motor_configs, LiftMechanism::CASCADE, my_lift_config);
 
 // ---- On-screen diagnostics (brain screen lines 6 and 7; lines 0 to 5 are the autonomous selector) ----
-#define BUILD_TAG "B15"           // shows which build is on the robot
+#define BUILD_TAG "B16"           // shows which build is on the robot
 volatile const char* diag_mode = "INIT"; // CAL, INIT, AUTO, AEND, OFF, DRV
 volatile uint32_t diag_loops = 0;  // counts driver-control loops
 volatile int diag_stage = 0;       // which step of the driver loop is running
@@ -101,8 +102,10 @@ void initialize() {
     // Left and right screen buttons change pages. The page after the last
     // routine is the position readout.
     auton_selector.autons_add({
-        {"Diagnostic\n\nDrive, turn, strafe,\nthen return to start", diagnosticAuton},
+        // Match is first so it is the default: a robot that was never set on the
+        // selector sits still in autonomous instead of running the drive test.
         {"Match\n\nEmpty template", matchAuton},
+        {"Diagnostic\n\nDrive, turn, strafe,\nthen return to start", diagnosticAuton},
     });
     auton_selector.initialize();
 
@@ -139,6 +142,16 @@ void initialize() {
                 pros::lcd::print(2, "Proximity: %d", colorSortProximity());
                 pros::lcd::print(3, "Stop on: %s", colorSortTargetName());
                 pros::lcd::print(4, "Sees it: %s", colorSortSeesTarget() ? "YES" : "no");
+            }
+            // The third blank page is the raw tracking wheel readings (degrees), for
+            // checking sensor direction: pushing the robot forward should raise L
+            // and R, pushing it right should raise H. If one goes down, make that
+            // port negative to reverse it.
+            if (auton_selector.page_blank_is_on(2)) {
+                pros::lcd::print(0, "Tracking wheels");
+                pros::lcd::print(1, "L: %.0f", pros::c::rotation_get_position(std::abs(leftOdomPort)) / 100.0);
+                pros::lcd::print(2, "R: %.0f", pros::c::rotation_get_position(std::abs(rightOdomPort)) / 100.0);
+                pros::lcd::print(3, "H: %.0f", pros::c::rotation_get_position(std::abs(horizontalOdomPort)) / 100.0);
             }
             pros::delay(50);
         }
@@ -207,7 +220,11 @@ void initialize() {
     // and it runs heavy math and prints 10 messages a second in the background.
     // tagOdom.startTask(100);
 
-    // 5. EXPLICIT FLOAT PID GAINS (4 values per array)
+    // Hold the lift and claw pivot where they stop instead of letting them fall
+    lift.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+    claw_pivot.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+
+    // 5. PID GAINS: {error threshold, {kP, kI, kD, kF}}. GainScheduler ignores kF.
     xSched.setGains({
         {36.0f, {15.0f, 0.0f, 2.4f, 0.0f}},
         {0.0f,  {25.0f, 0.0f, 0.5f, 0.0f}}
@@ -351,6 +368,8 @@ void opcontrol() {
         Claw_Control();
         diag_stage = 7;
         VPI_control();
+        diag_stage = 8;
+        claw_pivot_control();
         diag_stage = 0;
 
         pros::delay(20); 
