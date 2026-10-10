@@ -1,0 +1,20 @@
+Fix for: driver control does not move the bot after autonomous in a timed run
+
+Install: replace src/main.cpp in your PROS project with the one in this zip, then build and upload.
+Only opcontrol() changed. Everything above it is identical to your file.
+
+What changed
+1. The leftover autonomous motion is cancelled once at the start of opcontrol(),
+   with a wait of up to 500 ms for it to release the drive motors. The old code
+   cancelled inside the drive loop and drove in the same pass.
+2. The collision/replay block is switched off (ENABLE_COLLISION_REPLAY = false).
+3. Driver heading correction is switched off (ENABLE_HEADING_CORRECTION = false).
+4. A loop counter prints on the controller screen for diagnosis.
+
+Testing
+- Run a timed run. If the bot drives, set one switch back to true, re-upload, and repeat.
+- If it still will not drive, watch the controller screen:
+    counter frozen   -> a call in the loop is hanging (Intake, Lift, Claw_Control, VPI_control, or chassis)
+    counter counting -> something is still commanding the drive motors (the motion task)
+
+Not compiled here: this was edited without the PROS toolchain or the rest of your project.

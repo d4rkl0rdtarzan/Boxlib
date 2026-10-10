@@ -1,5 +1,4 @@
 #include "hololib/localization/odometry.hpp"
-#include "pros/error.h"
 #include <print>
 
 static constexpr float DEG2RAD = M_PI / 180.0f;
@@ -86,10 +85,7 @@ void EncoderEKFOdometry::update(uint32_t period_ms) {
 
             for (int i = 0; i < n; ++i) {
                 int32_t raw_pos = trackingWheelSensors[i].get_position();
-                // A sensor read error (unplugged or glitching cable) returns PROS_ERR.
-                // Treat it as no movement instead of a huge jump that would corrupt
-                // the pose and the heading that driver heading-hold steers by.
-                float current_pos = (raw_pos == PROS_ERR) ? prevTrackingPositions[i] : static_cast<float>(raw_pos);
+                float current_pos = static_cast<float>(raw_pos);
                 float delta_centideg = current_pos - prevTrackingPositions[i];
                 prevTrackingPositions[i] = current_pos;
 
@@ -169,11 +165,10 @@ void EncoderEKFOdometry::update(uint32_t period_ms) {
                 float step_dist = std::sqrt(dx_local * dx_local + dy_local * dy_local);
                 motionDistTraveled += step_dist;
 
-                // theta is a VEX heading (0 = +Y, clockwise positive), matching PoseEKF::predict
                 float cos_t = std::cos(currentPose.theta);
                 float sin_t = std::sin(currentPose.theta);
-                float dx_global = cos_t * dx_local + sin_t * dy_local;
-                float dy_global = -sin_t * dx_local + cos_t * dy_local;
+                float dx_global = cos_t * dx_local - sin_t * dy_local;
+                float dy_global = sin_t * dx_local + cos_t * dy_local;
 
                 currentPose.x += dx_global;
                 currentPose.y += dy_global;
@@ -225,11 +220,10 @@ void EncoderEKFOdometry::update(uint32_t period_ms) {
                 float step_dist = local_delta.norm();
                 motionDistTraveled += step_dist;
 
-                // theta is a VEX heading (0 = +Y, clockwise positive), matching PoseEKF::predict
                 float cos_t = std::cos(currentPose.theta);
                 float sin_t = std::sin(currentPose.theta);
-                float dx_global = cos_t * local_delta.x() + sin_t * local_delta.y();
-                float dy_global = -sin_t * local_delta.x() + cos_t * local_delta.y();
+                float dx_global = cos_t * local_delta.x() - sin_t * local_delta.y();
+                float dy_global = sin_t * local_delta.x() + cos_t * local_delta.y();
 
                 currentPose.x += dx_global;
                 currentPose.y += dy_global;

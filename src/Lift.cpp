@@ -14,8 +14,6 @@ else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)){
 }
 
 else {
-    // Stop using the brake mode (hold, set in initialize) so the lift keeps its
-    // height instead of dropping when the buttons are released
-    lift.brake();
+    lift.move(0);
 }
 }

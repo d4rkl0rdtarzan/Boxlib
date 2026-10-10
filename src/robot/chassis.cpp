@@ -4,7 +4,6 @@
 #include "hololib/util/PID.hpp"
 #include "hololib/util/Timer.hpp"
 #include "hololib/util/util.hpp"
-#include "pros/error.h"
 #include "pros/rtos.hpp"
 #include <cmath>
 #include <print>
@@ -18,33 +17,12 @@ namespace hololib {
  * to be run in initialize)
  */
 void Chassis::calibrate() {
-    // initialize() has to return before autonomous or driver control can run, so
-    // never wait on the IMU forever: an unplugged or faulted IMU reports an error
-    // status that can read as "still calibrating" indefinitely.
-    constexpr uint32_t CALIBRATION_TIMEOUT_MS = 3000;
-    if (imu.reset(true) == PROS_ERR) {
-        pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, "---");
-        std::println("IMU reset failed! Check the IMU port and cable.");
-        return;
-    }
-    const uint32_t start = pros::millis();
-    while (imu.is_calibrating() && pros::millis() - start < CALIBRATION_TIMEOUT_MS) {
+    imu.reset(true);
+    while (imu.is_calibrating()) {
         pros::delay(10);
-    }
-    if (imu.is_calibrating()) {
-        pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, "---");
-        std::println("IMU calibration timed out! Check the IMU port and cable.");
-        return;
     }
     pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, ".");
     std::println("Chassis Calibrated!");
-}
-
-void Chassis::resetDriveControl() {
-    headingInitialized = false;
-    receivedRotateInput = false;
-    headingPID.reset();
-    settled.set(0);
 }
 
 void Chassis::drive(float vx, float vy, float omega, float theta) {
@@ -132,9 +110,7 @@ void Chassis::driveControl(float forward,
         if (settled.isDone()) {
             settled.set(SETTLE_DELAY_MS);
         }
-    } else if (settled.isDone() && std::isfinite(currentHeading)) {
-        // Skipped if odometry ever reports a non-finite heading: a NaN here would
-        // reach every wheel through the rotation term and stop the drive entirely.
+    } else if (settled.isDone()) {
         float angleError = getAngleError(targetHeading, currentHeading);
 
         if (std::abs(angleError) < 0.5f) {

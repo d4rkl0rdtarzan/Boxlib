@@ -593,8 +593,8 @@
     },
     "upload_options": {
       "description": "An advanced PROS template for VEX V5 robotics, with first-class holonomic drivetrain support.",
-      "icon": "pizza",
-      "slot": 3
+      "icon": "ufo",
+      "slot": 6
     },
     "use_early_access": false
   }

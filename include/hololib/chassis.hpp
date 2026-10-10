@@ -64,14 +64,6 @@ public:
 
     void brake();
 
-    /**
-     * @brief Clears the driver-control heading hold so it re-targets the current heading.
-     * @note Call at the start of opcontrol. The hold state otherwise carries over from
-     * the previous driver period, and a pose reset in between turns it into a large
-     * heading error the moment the driver drives.
-     */
-    void resetDriveControl();
-
     bool detectCollision();
 
 private:
