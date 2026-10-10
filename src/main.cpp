@@ -17,6 +17,7 @@
 #include "VPI.hpp"
 #include "intake.hpp"
 #include "lift.hpp"
+#include "Claw_Pivot.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -113,9 +114,15 @@ void initialize() {
     odom.addTrackingWheel(horizontalConfig);
     
     odom.startTask();
-    tagOdom.startTask(100);
+    // AprilTag localization is off: nothing reads its pose, and without an AI Vision
+    // sensor on port 8 its task just spins and floods the terminal. Re-enable with
+    // tagOdom.startTask(100) once the sensor is mounted and used.
 
-    // 5. EXPLICIT FLOAT PID GAINS (4 values per array)
+    // Hold the lift and claw pivot where they stop instead of letting them fall
+    lift.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+    claw_pivot.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+
+    // 5. PID GAINS: {error threshold, {kP, kI, kD, kF}}. GainScheduler ignores kF.
     xSched.setGains({
         {36.0f, {15.0f, 0.0f, 2.4f, 0.0f}},
         {0.0f,  {25.0f, 0.0f, 0.5f, 0.0f}}
@@ -141,13 +148,21 @@ void initialize() {
             pros::lcd::print(3, "X Vel: %.3f", pose.velocity.vx);
             pros::lcd::print(4, "Y Vel: %.3f", pose.velocity.vy);
             pros::lcd::print(5, "W Vel: %.3f", pose.velocity.w);
+            // Raw tracking wheel readings (degrees) for checking sensor direction:
+            // pushing the robot forward should raise L and R, pushing it right should
+            // raise H. If one goes down, make that port negative to reverse it.
+            pros::lcd::print(6, "TW L: %.0f R: %.0f H: %.0f",
+                             pros::c::rotation_get_position(std::abs(leftOdomPort)) / 100.0,
+                             pros::c::rotation_get_position(std::abs(rightOdomPort)) / 100.0,
+                             pros::c::rotation_get_position(std::abs(horizontalOdomPort)) / 100.0);
             pros::delay(50);
         }
     });
 }
 
 void disabled() {
-    odom.setPose(0.0f, 0.0f, 0.0f);
+    // No pose reset here: autonomous sets its own starting pose, and resetting the
+    // IMU between autonomous and driver control threw off driver heading hold.
     my_lift.cancel();
 }
 
@@ -163,18 +178,25 @@ void autonomous() {
 
     odom.setPose(0.0f, 0.0f, 0.0f);
 
+    // Gains aren't tuned yet for the 0-127 output scale, so the tests run capped at
+    // about half power. Every move also gets its own timeout so one that can't settle
+    // doesn't eat the whole 15 s period. Raise the caps once the gains are tuned.
+    const hololib::MoveParams safe{.maxTranslationSpeed = 60.0f, .maxRotationSpeed = 60.0f, .timeout = 2500};
+
     // Diagnostic Test 1: Linear Translation
-    chassisAsync(hololib::moveToPoint(0.0f, 24.0f));
+    chassisAsync(hololib::moveToPoint(0.0f, 24.0f, safe));
 
     // Diagnostic Test 2: Point Turn
-    chassisAsync(hololib::turnToPoint(12.0f, 24.0f));
+    chassisAsync(hololib::turnToPoint(12.0f, 24.0f, safe));
 
     // Diagnostic Test 3: Holonomic Strafing
-    chassisAsync(hololib::strafeDistance(10.0f));
+    chassisAsync(hololib::strafeDistance(10.0f, true, safe));
 
     // Diagnostic Test 4: Motion Chaining with Early Exit
-    chassisAsync(hololib::moveToPoint(0.0f, 0.0f, {.minSpeed = 35.0f, .earlyExitRange = 7.0f, .timeout = 2000}));
-    chassisAsync(hololib::moveToPose(0.0f, 0.0f, 0.0f));
+    chassisAsync(hololib::moveToPoint(0.0f, 0.0f,
+                                      {.maxTranslationSpeed = 60.0f, .maxRotationSpeed = 60.0f, .minSpeed = 35.0f,
+                                       .earlyExitRange = 7.0f, .timeout = 2000}));
+    chassisAsync(hololib::moveToPose(0.0f, 0.0f, 0.0f, safe));
 }
 
 void opcontrol() {
@@ -187,6 +209,11 @@ void opcontrol() {
     backLeft.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     backRight.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     const int STICK_DEADZONE = 5; // same as the drive curve deadzones below
+
+    // Start heading hold fresh every driver period, so nothing from a previous run
+    // (target heading, PID integral) carries over
+    chassis.resetDriveControl();
+    bool wasColliding = false;
 
     while (true) {
         // Tank drive: left stick Y runs the left side, right stick Y runs the right side.
@@ -201,10 +228,14 @@ void opcontrol() {
         int rotation = (leftY - rightY) / 2;
         int sideways = (leftX + rightX) / 2;
 
-        if (chassis.detectCollision()) {
+        bool colliding = chassis.detectCollision();
+        if (colliding) {
             hololib::DriverReplay::getControllerInput(master);
-            std::println("Collision Detected!");
+            // Print once per collision, not every loop, so a long push can't flood
+            // the serial output
+            if (!wasColliding) std::println("Collision Detected!");
         }
+        wasColliding = colliding;
 
         bool sticksReleased = std::abs(forward) < STICK_DEADZONE && std::abs(sideways) < STICK_DEADZONE &&
                               std::abs(rotation) < STICK_DEADZONE;
@@ -227,6 +258,7 @@ void opcontrol() {
         Lift();
         Claw_Control();
         VPI_control();
+        claw_pivot_control();
 
         pros::delay(20); 
     }

@@ -1,3 +1,4 @@
+#pragma once
 #include "main.h"
 
 //Claw Pivot Control Function

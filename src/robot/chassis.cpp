@@ -4,6 +4,7 @@
 #include "hololib/util/PID.hpp"
 #include "hololib/util/Timer.hpp"
 #include "hololib/util/util.hpp"
+#include "pros/error.h"
 #include "pros/rtos.hpp"
 #include <cmath>
 #include <print>
@@ -17,12 +18,33 @@ namespace hololib {
  * to be run in initialize)
  */
 void Chassis::calibrate() {
-    imu.reset(true);
-    while (imu.is_calibrating()) {
+    // initialize() has to return before autonomous or driver control can run, so
+    // never wait on the IMU forever: an unplugged or faulted IMU reports an error
+    // status that can read as "still calibrating" indefinitely.
+    constexpr uint32_t CALIBRATION_TIMEOUT_MS = 3000;
+    if (imu.reset(true) == PROS_ERR) {
+        pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, "---");
+        std::println("IMU reset failed! Check the IMU port and cable.");
+        return;
+    }
+    const uint32_t start = pros::millis();
+    while (imu.is_calibrating() && pros::millis() - start < CALIBRATION_TIMEOUT_MS) {
         pros::delay(10);
+    }
+    if (imu.is_calibrating()) {
+        pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, "---");
+        std::println("IMU calibration timed out! Check the IMU port and cable.");
+        return;
     }
     pros::c::controller_rumble(pros::E_CONTROLLER_MASTER, ".");
     std::println("Chassis Calibrated!");
+}
+
+void Chassis::resetDriveControl() {
+    headingInitialized = false;
+    receivedRotateInput = false;
+    headingPID.reset();
+    settled.set(0);
 }
 
 void Chassis::drive(float vx, float vy, float omega, float theta) {
