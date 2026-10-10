@@ -132,7 +132,9 @@ void Chassis::driveControl(float forward,
         if (settled.isDone()) {
             settled.set(SETTLE_DELAY_MS);
         }
-    } else if (settled.isDone()) {
+    } else if (settled.isDone() && std::isfinite(currentHeading)) {
+        // Skipped if odometry ever reports a non-finite heading: a NaN here would
+        // reach every wheel through the rotation term and stop the drive entirely.
         float angleError = getAngleError(targetHeading, currentHeading);
 
         if (std::abs(angleError) < 0.5f) {

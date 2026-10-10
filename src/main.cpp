@@ -169,7 +169,9 @@ void disabled() {
 void competition_initialize() {}
 void simulation() {}
 
-void autonomous() {
+// Drivetrain test routine. Not used in matches: call it from autonomous() only
+// when testing on a practice field.
+void diagnosticAuton() {
     // Autonomous moves should stop firmly at their targets, not roll past them
     frontLeft.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
     frontRight.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
@@ -181,7 +183,7 @@ void autonomous() {
     // Gains aren't tuned yet for the 0-127 output scale, so the tests run capped at
     // about half power. Every move also gets its own timeout so one that can't settle
     // doesn't eat the whole 15 s period. Raise the caps once the gains are tuned.
-    const hololib::MoveParams safe{.maxTranslationSpeed = 60.0f, .maxRotationSpeed = 60.0f, .timeout = 2500};
+    static constexpr hololib::MoveParams safe{.maxTranslationSpeed = 60.0f, .maxRotationSpeed = 60.0f, .timeout = 2500};
 
     // Diagnostic Test 1: Linear Translation
     chassisAsync(hololib::moveToPoint(0.0f, 24.0f, safe));
@@ -199,6 +201,11 @@ void autonomous() {
     chassisAsync(hololib::moveToPose(0.0f, 0.0f, 0.0f, safe));
 }
 
+void autonomous() {
+    // No match autonomous yet. Do nothing so the robot sits still for the
+    // autonomous period and driver control starts from a clean state.
+}
+
 void opcontrol() {
     hololib::Chassis::DriveCurve movement_curve{.curve_multipler = 1.01f, .deadzone = 5.0f, .minimum_output = 5.0f};
     hololib::Chassis::DriveCurve rotation_curve{.curve_multipler = 1.028f, .deadzone = 5.0f, .minimum_output = 5.0f};
@@ -209,6 +216,10 @@ void opcontrol() {
     backLeft.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     backRight.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
     const int STICK_DEADZONE = 5; // same as the drive curve deadzones below
+
+    // Stop any motion still queued or running from autonomous so it can't fight
+    // the driver for the motors
+    hololib::motion_handler::cancel();
 
     // Start heading hold fresh every driver period, so nothing from a previous run
     // (target heading, PID integral) carries over
